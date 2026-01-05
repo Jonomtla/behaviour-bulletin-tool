@@ -418,7 +418,7 @@ export default function Home() {
           </div>
           <div className="form-group">
             <label>Image</label>
-            <div className={`image-upload ${formData.prevWebinarImage ? 'has-image' : ''}`}>
+            <label className={`image-upload ${formData.prevWebinarImage ? 'has-image' : ''}`}>
               {formData.prevWebinarImage ? (
                 <img src={formData.prevWebinarImage} alt="Preview" />
               ) : (
@@ -428,9 +428,9 @@ export default function Home() {
                 type="file"
                 accept="image/*"
                 onChange={handleImageUpload('prevWebinarImage')}
-                style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', top: 0, left: 0, cursor: 'pointer' }}
+                style={{ display: 'none' }}
               />
-            </div>
+            </label>
           </div>
           <div className="form-group">
             <label>Member Link</label>
@@ -516,7 +516,7 @@ export default function Home() {
           <div>
             <div className="form-group">
               <label>Image</label>
-              <div className={`image-upload ${formData.upcomingImage ? 'has-image' : ''}`} style={{ position: 'relative' }}>
+              <label className={`image-upload ${formData.upcomingImage ? 'has-image' : ''}`}>
                 {formData.upcomingImage ? (
                   <img src={formData.upcomingImage} alt="Preview" />
                 ) : (
@@ -526,9 +526,9 @@ export default function Home() {
                   type="file"
                   accept="image/*"
                   onChange={handleImageUpload('upcomingImage')}
-                  style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', top: 0, left: 0, cursor: 'pointer' }}
+                  style={{ display: 'none' }}
                 />
-              </div>
+              </label>
             </div>
             <div className="form-group">
               <label>Member Link</label>
