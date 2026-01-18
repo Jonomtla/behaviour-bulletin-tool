@@ -244,11 +244,32 @@ export default function Home() {
     return (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0]
       if (file) {
-        const reader = new FileReader()
-        reader.onloadend = () => {
-          setFormData(prev => ({ ...prev, [field]: reader.result as string }))
-        }
-        reader.readAsDataURL(file)
+        processImageFile(file, field)
+      }
+    }
+  }
+
+  function processImageFile(file: File, field: 'prevWebinarImage' | 'upcomingImage') {
+    if (!file.type.startsWith('image/')) return
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setFormData(prev => ({ ...prev, [field]: reader.result as string }))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  function handleDrop(field: 'prevWebinarImage' | 'upcomingImage') {
+    return (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const file = e.dataTransfer.files?.[0]
+      if (file) {
+        processImageFile(file, field)
       }
     }
   }
@@ -510,11 +531,15 @@ export default function Home() {
           </div>
           <div className="form-group">
             <label>Image</label>
-            <label className={`image-upload ${formData.prevWebinarImage ? 'has-image' : ''}`}>
+            <label
+              className={`image-upload ${formData.prevWebinarImage ? 'has-image' : ''}`}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop('prevWebinarImage')}
+            >
               {formData.prevWebinarImage ? (
                 <img src={formData.prevWebinarImage} alt="Preview" />
               ) : (
-                <p>Click to upload image</p>
+                <p>Click or drag image here</p>
               )}
               <input
                 type="file"
@@ -608,11 +633,15 @@ export default function Home() {
           <div>
             <div className="form-group">
               <label>Image</label>
-              <label className={`image-upload ${formData.upcomingImage ? 'has-image' : ''}`}>
+              <label
+                className={`image-upload ${formData.upcomingImage ? 'has-image' : ''}`}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop('upcomingImage')}
+              >
                 {formData.upcomingImage ? (
                   <img src={formData.upcomingImage} alt="Preview" />
                 ) : (
-                  <p>Click to upload image</p>
+                  <p>Click or drag image here</p>
                 )}
                 <input
                   type="file"
