@@ -17,9 +17,11 @@ interface SubjectLine {
 
 interface FormData {
   // Trainer's Toolbox
-  toolboxTitle: string
+  toolboxHook: string
   toolboxBlurb: string
   toolboxLink: string
+  toolboxCTA: string
+  toolboxTitle: string
 
   // Previous Webinar
   prevWebinarTitle: string
@@ -53,9 +55,11 @@ export default function Home() {
   const [isLoggingIn, setIsLoggingIn] = useState(false)
 
   const [formData, setFormData] = useState<FormData>({
-    toolboxTitle: '',
+    toolboxHook: '',
     toolboxBlurb: '',
     toolboxLink: '',
+    toolboxCTA: '',
+    toolboxTitle: '',
     prevWebinarTitle: '',
     prevWebinarImage: '',
     prevWebinarMemberLink: 'https://atamember.com/web-class-replays/',
@@ -77,6 +81,9 @@ export default function Home() {
   const [subjectLines, setSubjectLines] = useState<SubjectLine[]>([])
   const [selectedSubject, setSelectedSubject] = useState<number | null>(null)
   const [loadingSubjects, setLoadingSubjects] = useState(false)
+  const [toolboxTitles, setToolboxTitles] = useState<string[]>([])
+  const [selectedToolboxTitle, setSelectedToolboxTitle] = useState<number | null>(null)
+  const [loadingToolboxTitles, setLoadingToolboxTitles] = useState(false)
   const [shortenedSynopsis, setShortenedSynopsis] = useState('')
   const [loadingSynopsis, setLoadingSynopsis] = useState(false)
   const [creatingBroadcast, setCreatingBroadcast] = useState(false)
@@ -153,14 +160,41 @@ export default function Home() {
     }
   }
 
+  async function generateToolboxTitles() {
+    setLoadingToolboxTitles(true)
+    try {
+      const res = await fetch('/api/generate-toolbox-titles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hook: formData.toolboxHook,
+          blurb: formData.toolboxBlurb,
+          cta: formData.toolboxCTA
+        })
+      })
+      const data = await res.json()
+      setToolboxTitles(data.titles || [])
+      setSelectedToolboxTitle(null)
+    } catch (error) {
+      console.error('Failed to generate titles:', error)
+    } finally {
+      setLoadingToolboxTitles(false)
+    }
+  }
+
   async function generateSubjectLines() {
+    if (selectedToolboxTitle === null) {
+      alert('Please select a Toolbox title first')
+      return
+    }
     setLoadingSubjects(true)
     try {
+      const selectedTitle = toolboxTitles[selectedToolboxTitle]
       const res = await fetch('/api/generate-subjects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          trainerToolboxTitle: formData.toolboxTitle,
+          trainerToolboxTitle: selectedTitle,
           podcastTitle: formData.podcastTitle,
           upcomingTitle: formData.isArchive ? undefined : formData.upcomingTitle,
           archiveTitle: formData.isArchive ? formData.upcomingTitle : undefined
@@ -240,7 +274,9 @@ export default function Home() {
   <!-- Trainer's Toolbox -->
   <div style="margin-bottom: 30px;">
     <h2 style="color: #589B36; border-bottom: 2px solid #589B36; padding-bottom: 8px;">Trainer's Toolbox: ${formData.toolboxTitle}</h2>
+    <p><em>${formData.toolboxHook}</em></p>
     <p>${formData.toolboxBlurb}</p>
+    ${formData.toolboxCTA ? `<p><strong>${formData.toolboxCTA}</strong></p>` : ''}
     <a href="${generateUTM(formData.toolboxLink)}" style="display: inline-block; background: #589B36; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Read More</a>
   </div>
 
@@ -371,20 +407,30 @@ export default function Home() {
       <div className="card">
         <h2>Trainer&apos;s Toolbox</h2>
         <div className="form-group">
-          <label>Title</label>
-          <input
-            type="text"
-            value={formData.toolboxTitle}
-            onChange={(e) => setFormData(prev => ({ ...prev, toolboxTitle: e.target.value }))}
-            placeholder="e.g., Chirag Patel's 4 Ideas for Ear Flushing"
+          <label>Hook (question/teaser next to logo)</label>
+          <textarea
+            value={formData.toolboxHook}
+            onChange={(e) => setFormData(prev => ({ ...prev, toolboxHook: e.target.value }))}
+            placeholder="e.g., How do you train a medical behavior with an animal who never wants to be touched?"
+            style={{ minHeight: 60 }}
           />
         </div>
         <div className="form-group">
-          <label>Blurb</label>
+          <label>Blurb (main text)</label>
           <textarea
             value={formData.toolboxBlurb}
             onChange={(e) => setFormData(prev => ({ ...prev, toolboxBlurb: e.target.value }))}
-            placeholder="The description/blurb for this toolbox item..."
+            placeholder="The main description text..."
+            style={{ minHeight: 100 }}
+          />
+        </div>
+        <div className="form-group">
+          <label>CTA Text (call to action)</label>
+          <input
+            type="text"
+            value={formData.toolboxCTA}
+            onChange={(e) => setFormData(prev => ({ ...prev, toolboxCTA: e.target.value }))}
+            placeholder="e.g., See the case studies and Lisa's 5 objectives."
           />
         </div>
         <div className="form-group">
@@ -398,6 +444,52 @@ export default function Home() {
           {formData.toolboxLink && (
             <div className="utm-preview" style={{ marginTop: 8 }}>
               {generateUTM(formData.toolboxLink)}
+            </div>
+          )}
+        </div>
+
+        <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid #eee' }}>
+          <h3 style={{ fontSize: 16, marginBottom: 12, color: '#589B36' }}>Generate Title Options</h3>
+          <button
+            onClick={generateToolboxTitles}
+            className="btn btn-primary"
+            disabled={loadingToolboxTitles || !formData.toolboxHook || !formData.toolboxBlurb}
+            style={{ marginBottom: 16 }}
+          >
+            {loadingToolboxTitles ? 'Generating...' : 'Generate 10 Title Options'}
+          </button>
+
+          {toolboxTitles.length > 0 && (
+            <div className="subject-lines">
+              {toolboxTitles.map((title, index) => (
+                <div
+                  key={index}
+                  className={`subject-line-option ${selectedToolboxTitle === index ? 'selected' : ''}`}
+                  onClick={() => {
+                    setSelectedToolboxTitle(index)
+                    setFormData(prev => ({ ...prev, toolboxTitle: title }))
+                  }}
+                >
+                  <input
+                    type="radio"
+                    checked={selectedToolboxTitle === index}
+                    onChange={() => {
+                      setSelectedToolboxTitle(index)
+                      setFormData(prev => ({ ...prev, toolboxTitle: title }))
+                    }}
+                  />
+                  <div className="text">
+                    <div className="subject">{title}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {selectedToolboxTitle !== null && (
+            <div className="preview-section" style={{ marginTop: 16 }}>
+              <h3>Selected Title</h3>
+              <p><strong>{toolboxTitles[selectedToolboxTitle]}</strong></p>
             </div>
           )}
         </div>
