@@ -362,3 +362,285 @@ body {
   word-break: break-all;
   color: #666;
 }
+
+/* Progress Bar */
+.progress-bar-container {
+  background: white;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.progress-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #555;
+}
+
+.progress-percent {
+  font-size: 14px;
+  font-weight: 600;
+  color: #589B36;
+}
+
+.progress-bar {
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #589B36, #7bc353);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.progress-steps {
+  display: flex;
+  justify-content: space-between;
+}
+
+.progress-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.step-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e0e0e0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: white;
+  transition: all 0.2s;
+}
+
+.progress-step.complete .step-dot {
+  background: #589B36;
+}
+
+.progress-step.in-progress .step-dot {
+  background: #f57c00;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+.step-label {
+  font-size: 11px;
+  color: #888;
+  text-align: center;
+}
+
+.progress-step.complete .step-label {
+  color: #589B36;
+  font-weight: 500;
+}
+
+.progress-step.in-progress .step-label {
+  color: #f57c00;
+  font-weight: 500;
+}
+
+/* Quick Actions Bar */
+.quick-actions {
+  background: white;
+  border-radius: 12px;
+  padding: 12px 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.quick-actions-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+}
+
+.keyboard-hint {
+  font-size: 12px;
+  color: #888;
+  margin-left: auto;
+}
+
+@media (max-width: 768px) {
+  .keyboard-hint {
+    display: none;
+  }
+}
+
+/* Step Indicator */
+.step-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e0e0e0;
+  color: #666;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.step-indicator.complete {
+  background: #589B36;
+  color: white;
+}
+
+.step-indicator.in-progress {
+  background: #f57c00;
+  color: white;
+}
+
+/* Complete Badge */
+.complete-badge {
+  font-size: 12px;
+  background: #e8f5e0;
+  color: #589B36;
+  padding: 2px 8px;
+  border-radius: 12px;
+  margin-left: auto;
+  font-weight: 500;
+}
+
+/* Collapse Icon */
+.collapse-icon {
+  font-size: 12px;
+  color: #888;
+  margin-left: 8px;
+  transition: transform 0.2s;
+}
+
+.card.collapsed {
+  padding-bottom: 16px;
+}
+
+.card.collapsed > *:not(h2) {
+  display: none;
+}
+
+/* Copy Button */
+.copy-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.copy-btn:hover {
+  background: #e0e0e0;
+}
+
+/* Button Sizes */
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.btn-lg {
+  padding: 16px 32px;
+  font-size: 16px;
+}
+
+/* Title Generation Section */
+.title-generation-section {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #eee;
+}
+
+.title-generation-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  color: #589B36;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+/* Compact subject lines (for title selection) */
+.subject-lines.compact .subject-line-option {
+  padding: 8px 12px;
+}
+
+.subject-lines.compact .subject {
+  font-size: 14px;
+}
+
+/* Selected Summary */
+.selected-summary {
+  background: #e8f5e0;
+  border: 1px solid #c8e6c0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.selected-summary h4 {
+  color: #589B36;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.selected-summary p {
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.selected-summary p:last-child {
+  margin-bottom: 0;
+}
+
+/* Final Step Card */
+.card.final-step {
+  background: linear-gradient(135deg, #fff 0%, #f9fff6 100%);
+  border: 2px solid #589B36;
+}
+
+/* Preview section improvements */
+.preview-section h4 {
+  font-size: 13px;
+  color: #589B36;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.preview-section p {
+  font-size: 14px;
+  line-height: 1.5;
+}

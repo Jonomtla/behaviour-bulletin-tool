@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 
 interface PodcastData {
   title: string
@@ -16,38 +16,46 @@ interface SubjectLine {
 }
 
 interface FormData {
-  // Trainer's Toolbox
   toolboxHook: string
   toolboxBlurb: string
   toolboxLink: string
   toolboxCTA: string
   toolboxTitle: string
-
-  // Previous Webinar
   prevWebinarTitle: string
   prevWebinarImage: string
   prevWebinarMemberLink: string
   prevWebinarNonMemberLink: string
-
-  // Upcoming / Archives
   upcomingTitle: string
   upcomingSynopsis: string
   upcomingImage: string
   upcomingMemberLink: string
   upcomingNonMemberLink: string
   isArchive: boolean
-
-  // Podcast (auto-fetched)
   podcastTitle: string
   podcastImage: string
   podcastDate: string
-
-  // UTM
   campaignDate: string
-
-  // Schedule
   scheduledDate: string
 }
+
+// Step tracking for progress indicator
+type StepStatus = 'pending' | 'in-progress' | 'complete'
+
+interface WorkflowStep {
+  id: string
+  label: string
+  shortLabel: string
+}
+
+const WORKFLOW_STEPS: WorkflowStep[] = [
+  { id: 'toolbox', label: "Trainer's Toolbox", shortLabel: 'Toolbox' },
+  { id: 'title', label: 'Select Title', shortLabel: 'Title' },
+  { id: 'webinar', label: 'Previous Webinar', shortLabel: 'Webinar' },
+  { id: 'podcast', label: 'Fetch Podcast', shortLabel: 'Podcast' },
+  { id: 'upcoming', label: 'Upcoming/Archives', shortLabel: 'Upcoming' },
+  { id: 'subject', label: 'Subject Line', shortLabel: 'Subject' },
+  { id: 'create', label: 'Create Broadcasts', shortLabel: 'Create' },
+]
 
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
@@ -90,6 +98,8 @@ export default function Home() {
   const [loadingSynopsis, setLoadingSynopsis] = useState(false)
   const [creatingBroadcast, setCreatingBroadcast] = useState(false)
   const [broadcastResult, setBroadcastResult] = useState<string | null>(null)
+  const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set())
 
   function getNextTuesday(): string {
     const today = new Date()
@@ -100,10 +110,62 @@ export default function Home() {
     return nextTuesday.toISOString().split('T')[0]
   }
 
+  // Calculate step statuses for progress indicator
+  const getStepStatus = useCallback((stepId: string): StepStatus => {
+    switch (stepId) {
+      case 'toolbox':
+        if (formData.toolboxHook && formData.toolboxBlurb && formData.toolboxLink) return 'complete'
+        if (formData.toolboxHook || formData.toolboxBlurb) return 'in-progress'
+        return 'pending'
+      case 'title':
+        if (selectedToolboxTitle !== null) return 'complete'
+        if (toolboxTitles.length > 0) return 'in-progress'
+        return 'pending'
+      case 'webinar':
+        if (formData.prevWebinarTitle && formData.prevWebinarImage) return 'complete'
+        if (formData.prevWebinarTitle || formData.prevWebinarImage) return 'in-progress'
+        return 'pending'
+      case 'podcast':
+        if (podcast) return 'complete'
+        return 'pending'
+      case 'upcoming':
+        if (formData.upcomingTitle && (shortenedSynopsis || formData.upcomingSynopsis)) return 'complete'
+        if (formData.upcomingTitle || formData.upcomingSynopsis) return 'in-progress'
+        return 'pending'
+      case 'subject':
+        if (selectedSubject !== null) return 'complete'
+        if (subjectLines.length > 0) return 'in-progress'
+        return 'pending'
+      case 'create':
+        if (broadcastResult?.includes('successfully')) return 'complete'
+        return 'pending'
+      default:
+        return 'pending'
+    }
+  }, [formData, selectedToolboxTitle, toolboxTitles, podcast, shortenedSynopsis, selectedSubject, subjectLines, broadcastResult])
+
+  const completedSteps = WORKFLOW_STEPS.filter(s => getStepStatus(s.id) === 'complete').length
+  const progressPercent = Math.round((completedSteps / WORKFLOW_STEPS.length) * 100)
+
   // Check authentication on mount
   useEffect(() => {
     checkAuth()
   }, [])
+
+  // Auto-fetch podcast on load if not already fetched
+  useEffect(() => {
+    if (isAuthenticated && !podcast && !loadingPodcast) {
+      const savedDraft = localStorage.getItem('behaviourBulletinDraft')
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft)
+        if (!parsed.podcast) {
+          fetchPodcast()
+        }
+      } else {
+        fetchPodcast()
+      }
+    }
+  }, [isAuthenticated])
 
   // Load saved draft from localStorage on mount
   useEffect(() => {
@@ -138,8 +200,30 @@ export default function Home() {
     localStorage.setItem('behaviourBulletinDraft', JSON.stringify(draft))
   }, [formData, toolboxTitles, selectedToolboxTitle, subjectLines, selectedSubject, shortenedSynopsis, podcast])
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Cmd/Ctrl + Enter to create broadcasts
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && selectedSubject !== null) {
+        e.preventDefault()
+        createBroadcasts()
+      }
+      // Cmd/Ctrl + G to generate (titles or subjects based on context)
+      if ((e.metaKey || e.ctrlKey) && e.key === 'g') {
+        e.preventDefault()
+        if (selectedToolboxTitle !== null && subjectLines.length === 0) {
+          generateSubjectLines()
+        } else if (formData.toolboxHook && formData.toolboxBlurb && toolboxTitles.length === 0) {
+          generateToolboxTitles()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedSubject, selectedToolboxTitle, formData.toolboxHook, formData.toolboxBlurb, toolboxTitles.length, subjectLines.length])
+
   function clearDraft() {
-    if (confirm('Are you sure you want to clear all form data?')) {
+    if (confirm('Are you sure you want to clear all form data? This cannot be undone.')) {
       localStorage.removeItem('behaviourBulletinDraft')
       window.location.reload()
     }
@@ -316,12 +400,29 @@ export default function Home() {
     }
   }
 
+  function copyToClipboard(text: string, fieldName: string) {
+    navigator.clipboard.writeText(text)
+    setCopiedField(fieldName)
+    setTimeout(() => setCopiedField(null), 2000)
+  }
+
+  function toggleSection(sectionId: string) {
+    setCollapsedSections(prev => {
+      const next = new Set(prev)
+      if (next.has(sectionId)) {
+        next.delete(sectionId)
+      } else {
+        next.add(sectionId)
+      }
+      return next
+    })
+  }
+
   function generateEmailHTML(isMember: boolean): string {
     const synopsis = shortenedSynopsis || formData.upcomingSynopsis
     const upcomingLink = isMember ? formData.upcomingMemberLink : formData.upcomingNonMemberLink
     const prevWebinarLink = isMember ? formData.prevWebinarMemberLink : formData.prevWebinarNonMemberLink
 
-    // This is a simplified HTML template - in production you'd use the actual Kit template
     return `
 <!DOCTYPE html>
 <html>
@@ -459,278 +560,449 @@ export default function Home() {
   // Main app
   return (
     <div className="container">
+      {/* Header with progress */}
       <div className="header">
         <div style={{ flex: 1 }}>
           <h1>Behaviour Bulletin Tool</h1>
           <p style={{ opacity: 0.9, fontSize: 14 }}>Animal Training Academy</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={clearDraft} className="btn btn-secondary" style={{ background: '#ff6b6b', color: 'white' }}>Clear Draft</button>
           <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
         </div>
       </div>
 
-      {/* Trainer's Toolbox */}
-      <div className="card">
-        <h2>Trainer&apos;s Toolbox</h2>
-        <div className="form-group">
-          <label>Hook (question/teaser next to logo)</label>
-          <textarea
-            value={formData.toolboxHook}
-            onChange={(e) => setFormData(prev => ({ ...prev, toolboxHook: e.target.value }))}
-            placeholder="e.g., How do you train a medical behavior with an animal who never wants to be touched?"
-            style={{ minHeight: 60 }}
-          />
+      {/* Progress Indicator */}
+      <div className="progress-bar-container">
+        <div className="progress-header">
+          <span className="progress-label">Progress: {completedSteps}/{WORKFLOW_STEPS.length} steps</span>
+          <span className="progress-percent">{progressPercent}%</span>
         </div>
-        <div className="form-group">
-          <label>Blurb (main text)</label>
-          <textarea
-            value={formData.toolboxBlurb}
-            onChange={(e) => setFormData(prev => ({ ...prev, toolboxBlurb: e.target.value }))}
-            placeholder="The main description text..."
-            style={{ minHeight: 100 }}
-          />
+        <div className="progress-bar">
+          <div className="progress-fill" style={{ width: `${progressPercent}%` }}></div>
         </div>
-        <div className="form-group">
-          <label>CTA Text (call to action)</label>
-          <input
-            type="text"
-            value={formData.toolboxCTA}
-            onChange={(e) => setFormData(prev => ({ ...prev, toolboxCTA: e.target.value }))}
-            placeholder="e.g., See the case studies and Lisa's 5 objectives."
-          />
-        </div>
-        <div className="form-group">
-          <label>Link (without UTM)</label>
-          <input
-            type="url"
-            value={formData.toolboxLink}
-            onChange={(e) => setFormData(prev => ({ ...prev, toolboxLink: e.target.value }))}
-            placeholder="https://atamember.com/..."
-          />
-          {formData.toolboxLink && (
-            <div className="utm-preview" style={{ marginTop: 8 }}>
-              {generateUTM(formData.toolboxLink)}
-            </div>
-          )}
-        </div>
-
-        <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid #eee' }}>
-          <h3 style={{ fontSize: 16, marginBottom: 12, color: '#589B36' }}>Generate Title Options</h3>
-          <button
-            onClick={generateToolboxTitles}
-            className="btn btn-primary"
-            disabled={loadingToolboxTitles || !formData.toolboxHook || !formData.toolboxBlurb}
-            style={{ marginBottom: 16 }}
-          >
-            {loadingToolboxTitles ? 'Generating...' : 'Generate 10 Title Options'}
-          </button>
-
-          {toolboxTitles.length > 0 && (
-            <div className="subject-lines">
-              {toolboxTitles.map((title, index) => (
-                <div
-                  key={index}
-                  className={`subject-line-option ${selectedToolboxTitle === index ? 'selected' : ''}`}
-                  onClick={() => {
-                    setSelectedToolboxTitle(index)
-                    setFormData(prev => ({ ...prev, toolboxTitle: title }))
-                  }}
-                >
-                  <input
-                    type="radio"
-                    checked={selectedToolboxTitle === index}
-                    onChange={() => {
-                      setSelectedToolboxTitle(index)
-                      setFormData(prev => ({ ...prev, toolboxTitle: title }))
-                    }}
-                  />
-                  <div className="text">
-                    <div className="subject">{title}</div>
-                  </div>
+        <div className="progress-steps">
+          {WORKFLOW_STEPS.map((step) => {
+            const status = getStepStatus(step.id)
+            return (
+              <div key={step.id} className={`progress-step ${status}`} title={step.label}>
+                <div className="step-dot">
+                  {status === 'complete' && <span>✓</span>}
                 </div>
-              ))}
-            </div>
-          )}
-
-          {selectedToolboxTitle !== null && (
-            <div className="preview-section" style={{ marginTop: 16 }}>
-              <h3>Selected Title</h3>
-              <p><strong>{toolboxTitles[selectedToolboxTitle]}</strong></p>
-            </div>
-          )}
+                <span className="step-label">{step.shortLabel}</span>
+              </div>
+            )
+          })}
         </div>
       </div>
 
-      <div className="grid-2">
-        {/* Previous Webinar */}
-        <div className="card">
-          <h2>Previous Webinar</h2>
-          <div className="form-group">
-            <label>Title</label>
-            <input
-              type="text"
-              value={formData.prevWebinarTitle}
-              onChange={(e) => setFormData(prev => ({ ...prev, prevWebinarTitle: e.target.value }))}
-              placeholder="The Secret to a Truly Confident Dog"
-            />
-          </div>
-          <div className="form-group">
-            <label>Image</label>
-            <label
-              className={`image-upload ${formData.prevWebinarImage ? 'has-image' : ''}`}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop('prevWebinarImage')}
-            >
-              {formData.prevWebinarImage ? (
-                <img src={formData.prevWebinarImage} alt="Preview" />
-              ) : (
-                <p>Click or drag image here</p>
-              )}
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload('prevWebinarImage')}
-                style={{ display: 'none' }}
-              />
-            </label>
-          </div>
-          <div className="form-group">
-            <label>Member Link</label>
-            <input
-              type="url"
-              value={formData.prevWebinarMemberLink}
-              onChange={(e) => setFormData(prev => ({ ...prev, prevWebinarMemberLink: e.target.value }))}
-            />
-          </div>
-          <div className="form-group">
-            <label>Non-Member Landing Page</label>
-            <input
-              type="url"
-              value={formData.prevWebinarNonMemberLink}
-              onChange={(e) => setFormData(prev => ({ ...prev, prevWebinarNonMemberLink: e.target.value }))}
-              placeholder="https://animaltrainingacademy.com/webinar-name/"
-            />
-          </div>
-        </div>
+      {/* Quick Actions Bar */}
+      <div className="quick-actions">
+        <span className="quick-actions-label">Quick Actions:</span>
+        <button
+          onClick={generateToolboxTitles}
+          className="btn btn-sm"
+          disabled={loadingToolboxTitles || !formData.toolboxHook || !formData.toolboxBlurb || toolboxTitles.length > 0}
+        >
+          Generate Titles
+        </button>
+        <button
+          onClick={generateSubjectLines}
+          className="btn btn-sm"
+          disabled={loadingSubjects || selectedToolboxTitle === null}
+        >
+          Generate Subjects
+        </button>
+        <button
+          onClick={createBroadcasts}
+          className="btn btn-sm btn-primary"
+          disabled={creatingBroadcast || selectedSubject === null}
+        >
+          Create Broadcasts
+        </button>
+        <span className="keyboard-hint">Tip: ⌘+G to generate, ⌘+Enter to create</span>
+      </div>
 
-        {/* Podcast */}
-        <div className="card">
-          <h2>Latest Podcast</h2>
-          {podcast ? (
-            <div className="podcast-preview">
-              {podcast.image && <img src={podcast.image} alt="Podcast" />}
-              <div className="info">
-                <div className="title">{podcast.title}</div>
-                <div className="date">{podcast.date}</div>
+      {/* Step 1: Trainer's Toolbox */}
+      <div className={`card ${collapsedSections.has('toolbox') ? 'collapsed' : ''}`}>
+        <h2 onClick={() => toggleSection('toolbox')} style={{ cursor: 'pointer' }}>
+          <span className={`step-indicator ${getStepStatus('toolbox')}`}>1</span>
+          Trainer&apos;s Toolbox
+          {getStepStatus('toolbox') === 'complete' && <span className="complete-badge">✓ Complete</span>}
+          <span className="collapse-icon">{collapsedSections.has('toolbox') ? '▼' : '▲'}</span>
+        </h2>
+        {!collapsedSections.has('toolbox') && (
+          <>
+            <div className="form-group">
+              <label>Hook (question/teaser next to logo)</label>
+              <textarea
+                value={formData.toolboxHook}
+                onChange={(e) => setFormData(prev => ({ ...prev, toolboxHook: e.target.value }))}
+                placeholder="e.g., How do you train a medical behavior with an animal who never wants to be touched?"
+                style={{ minHeight: 60 }}
+              />
+            </div>
+            <div className="form-group">
+              <label>Blurb (main text)</label>
+              <textarea
+                value={formData.toolboxBlurb}
+                onChange={(e) => setFormData(prev => ({ ...prev, toolboxBlurb: e.target.value }))}
+                placeholder="The main description text..."
+                style={{ minHeight: 100 }}
+              />
+            </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label>CTA Text (call to action)</label>
+                <input
+                  type="text"
+                  value={formData.toolboxCTA}
+                  onChange={(e) => setFormData(prev => ({ ...prev, toolboxCTA: e.target.value }))}
+                  placeholder="e.g., See the case studies and Lisa's 5 objectives."
+                />
+              </div>
+              <div className="form-group">
+                <label>Link (without UTM)</label>
+                <input
+                  type="url"
+                  value={formData.toolboxLink}
+                  onChange={(e) => setFormData(prev => ({ ...prev, toolboxLink: e.target.value }))}
+                  placeholder="https://atamember.com/..."
+                />
               </div>
             </div>
-          ) : (
-            <p style={{ color: '#666', marginBottom: 16 }}>Click below to fetch the latest podcast</p>
+
+            {/* Title Generation */}
+            <div className="title-generation-section">
+              <div className="section-header">
+                <h3>
+                  <span className={`step-indicator ${getStepStatus('title')}`}>2</span>
+                  Select Title
+                </h3>
+                <button
+                  onClick={generateToolboxTitles}
+                  className="btn btn-primary"
+                  disabled={loadingToolboxTitles || !formData.toolboxHook || !formData.toolboxBlurb}
+                >
+                  {loadingToolboxTitles ? 'Generating...' : toolboxTitles.length > 0 ? 'Regenerate Titles' : 'Generate 10 Titles'}
+                </button>
+              </div>
+
+              {toolboxTitles.length > 0 && (
+                <div className="subject-lines compact">
+                  {toolboxTitles.map((title, index) => (
+                    <div
+                      key={index}
+                      className={`subject-line-option ${selectedToolboxTitle === index ? 'selected' : ''}`}
+                      onClick={() => {
+                        setSelectedToolboxTitle(index)
+                        setFormData(prev => ({ ...prev, toolboxTitle: title }))
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        checked={selectedToolboxTitle === index}
+                        onChange={() => {
+                          setSelectedToolboxTitle(index)
+                          setFormData(prev => ({ ...prev, toolboxTitle: title }))
+                        }}
+                      />
+                      <div className="text">
+                        <div className="subject">{title}</div>
+                      </div>
+                      <button
+                        className="copy-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          copyToClipboard(title, `title-${index}`)
+                        }}
+                        title="Copy to clipboard"
+                      >
+                        {copiedField === `title-${index}` ? '✓' : '📋'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Step 3 & 4: Previous Webinar & Podcast */}
+      <div className="grid-2">
+        <div className={`card ${collapsedSections.has('webinar') ? 'collapsed' : ''}`}>
+          <h2 onClick={() => toggleSection('webinar')} style={{ cursor: 'pointer' }}>
+            <span className={`step-indicator ${getStepStatus('webinar')}`}>3</span>
+            Previous Webinar
+            {getStepStatus('webinar') === 'complete' && <span className="complete-badge">✓</span>}
+            <span className="collapse-icon">{collapsedSections.has('webinar') ? '▼' : '▲'}</span>
+          </h2>
+          {!collapsedSections.has('webinar') && (
+            <>
+              <div className="form-group">
+                <label>Title</label>
+                <input
+                  type="text"
+                  value={formData.prevWebinarTitle}
+                  onChange={(e) => setFormData(prev => ({ ...prev, prevWebinarTitle: e.target.value }))}
+                  placeholder="The Secret to a Truly Confident Dog"
+                />
+              </div>
+              <div className="form-group">
+                <label>Image</label>
+                <label
+                  className={`image-upload ${formData.prevWebinarImage ? 'has-image' : ''}`}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop('prevWebinarImage')}
+                >
+                  {formData.prevWebinarImage ? (
+                    <img src={formData.prevWebinarImage} alt="Preview" />
+                  ) : (
+                    <p>Click or drag image here</p>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload('prevWebinarImage')}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              </div>
+              <div className="form-group">
+                <label>Member Link</label>
+                <input
+                  type="url"
+                  value={formData.prevWebinarMemberLink}
+                  onChange={(e) => setFormData(prev => ({ ...prev, prevWebinarMemberLink: e.target.value }))}
+                />
+              </div>
+              <div className="form-group">
+                <label>Non-Member Link</label>
+                <input
+                  type="url"
+                  value={formData.prevWebinarNonMemberLink}
+                  onChange={(e) => setFormData(prev => ({ ...prev, prevWebinarNonMemberLink: e.target.value }))}
+                  placeholder="https://animaltrainingacademy.com/webinar-name/"
+                />
+              </div>
+            </>
           )}
-          <button
-            onClick={fetchPodcast}
-            className="btn btn-outline"
-            disabled={loadingPodcast}
-            style={{ marginTop: podcast ? 16 : 0 }}
-          >
-            {loadingPodcast ? 'Fetching...' : podcast ? 'Refresh' : 'Fetch Latest Podcast'}
-          </button>
+        </div>
+
+        <div className={`card ${collapsedSections.has('podcast') ? 'collapsed' : ''}`}>
+          <h2 onClick={() => toggleSection('podcast')} style={{ cursor: 'pointer' }}>
+            <span className={`step-indicator ${getStepStatus('podcast')}`}>4</span>
+            Latest Podcast
+            {getStepStatus('podcast') === 'complete' && <span className="complete-badge">✓</span>}
+            <span className="collapse-icon">{collapsedSections.has('podcast') ? '▼' : '▲'}</span>
+          </h2>
+          {!collapsedSections.has('podcast') && (
+            <>
+              {loadingPodcast ? (
+                <div style={{ textAlign: 'center', padding: 20 }}>
+                  <div className="loading-spinner"></div>
+                  <p style={{ marginTop: 10, color: '#666' }}>Fetching latest podcast...</p>
+                </div>
+              ) : podcast ? (
+                <div className="podcast-preview">
+                  {podcast.image && <img src={podcast.image} alt="Podcast" />}
+                  <div className="info">
+                    <div className="title">{podcast.title}</div>
+                    <div className="date">{podcast.date}</div>
+                  </div>
+                </div>
+              ) : (
+                <p style={{ color: '#666', marginBottom: 16 }}>Click below to fetch the latest podcast</p>
+              )}
+              <button
+                onClick={fetchPodcast}
+                className="btn btn-outline"
+                disabled={loadingPodcast}
+                style={{ marginTop: podcast ? 16 : 0 }}
+              >
+                {loadingPodcast ? 'Fetching...' : podcast ? 'Refresh Podcast' : 'Fetch Latest Podcast'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Upcoming / Archives */}
-      <div className="card">
-        <h2>
+      {/* Step 5: Upcoming / Archives */}
+      <div className={`card ${collapsedSections.has('upcoming') ? 'collapsed' : ''}`}>
+        <h2 onClick={() => toggleSection('upcoming')} style={{ cursor: 'pointer' }}>
+          <span className={`step-indicator ${getStepStatus('upcoming')}`}>5</span>
           <span>{formData.isArchive ? 'From the Archives' : 'Upcoming Webinar'}</span>
+          {getStepStatus('upcoming') === 'complete' && <span className="complete-badge">✓</span>}
           <button
-            onClick={() => setFormData(prev => ({ ...prev, isArchive: !prev.isArchive }))}
-            className="btn btn-secondary"
-            style={{ marginLeft: 'auto', fontSize: 12, padding: '6px 12px' }}
+            onClick={(e) => {
+              e.stopPropagation()
+              setFormData(prev => ({ ...prev, isArchive: !prev.isArchive }))
+            }}
+            className="btn btn-secondary btn-sm"
+            style={{ marginLeft: 'auto' }}
           >
             Switch to {formData.isArchive ? 'Upcoming' : 'Archives'}
           </button>
+          <span className="collapse-icon">{collapsedSections.has('upcoming') ? '▼' : '▲'}</span>
         </h2>
-        <div className="grid-2">
-          <div>
-            <div className="form-group">
-              <label>Title</label>
-              <input
-                type="text"
-                value={formData.upcomingTitle}
-                onChange={(e) => setFormData(prev => ({ ...prev, upcomingTitle: e.target.value }))}
-                placeholder="Beyond Resilience: The Secret to a Truly Confident Dog"
-              />
-            </div>
-            <div className="form-group">
-              <label>Synopsis (full version)</label>
-              <textarea
-                value={formData.upcomingSynopsis}
-                onChange={(e) => setFormData(prev => ({ ...prev, upcomingSynopsis: e.target.value }))}
-                placeholder="Paste the full synopsis here..."
-                style={{ minHeight: 120 }}
-              />
-            </div>
-            <button
-              onClick={shortenSynopsis}
-              className="btn btn-outline"
-              disabled={loadingSynopsis || !formData.upcomingSynopsis}
-            >
-              {loadingSynopsis ? 'Shortening...' : 'Shorten with AI'}
-            </button>
-            {shortenedSynopsis && (
-              <div className="preview-section">
-                <h3>Shortened Synopsis</h3>
-                <p>{shortenedSynopsis}</p>
-              </div>
-            )}
-          </div>
-          <div>
-            <div className="form-group">
-              <label>Image</label>
-              <label
-                className={`image-upload ${formData.upcomingImage ? 'has-image' : ''}`}
-                onDragOver={handleDragOver}
-                onDrop={handleDrop('upcomingImage')}
-              >
-                {formData.upcomingImage ? (
-                  <img src={formData.upcomingImage} alt="Preview" />
-                ) : (
-                  <p>Click or drag image here</p>
-                )}
+        {!collapsedSections.has('upcoming') && (
+          <div className="grid-2">
+            <div>
+              <div className="form-group">
+                <label>Title</label>
                 <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload('upcomingImage')}
-                  style={{ display: 'none' }}
+                  type="text"
+                  value={formData.upcomingTitle}
+                  onChange={(e) => setFormData(prev => ({ ...prev, upcomingTitle: e.target.value }))}
+                  placeholder="Beyond Resilience: The Secret to a Truly Confident Dog"
                 />
-              </label>
+              </div>
+              <div className="form-group">
+                <label>Synopsis (full version)</label>
+                <textarea
+                  value={formData.upcomingSynopsis}
+                  onChange={(e) => setFormData(prev => ({ ...prev, upcomingSynopsis: e.target.value }))}
+                  placeholder="Paste the full synopsis here..."
+                  style={{ minHeight: 100 }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button
+                  onClick={shortenSynopsis}
+                  className="btn btn-outline"
+                  disabled={loadingSynopsis || !formData.upcomingSynopsis}
+                >
+                  {loadingSynopsis ? 'Shortening...' : 'Shorten with AI'}
+                </button>
+                {shortenedSynopsis && (
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => copyToClipboard(shortenedSynopsis, 'synopsis')}
+                  >
+                    {copiedField === 'synopsis' ? '✓ Copied' : 'Copy Short Version'}
+                  </button>
+                )}
+              </div>
+              {shortenedSynopsis && (
+                <div className="preview-section">
+                  <h4>Shortened Synopsis</h4>
+                  <p>{shortenedSynopsis}</p>
+                </div>
+              )}
             </div>
-            <div className="form-group">
-              <label>Member Link</label>
-              <input
-                type="url"
-                value={formData.upcomingMemberLink}
-                onChange={(e) => setFormData(prev => ({ ...prev, upcomingMemberLink: e.target.value }))}
-              />
-            </div>
-            <div className="form-group">
-              <label>Non-Member Landing Page</label>
-              <input
-                type="url"
-                value={formData.upcomingNonMemberLink}
-                onChange={(e) => setFormData(prev => ({ ...prev, upcomingNonMemberLink: e.target.value }))}
-                placeholder="https://animaltrainingacademy.com/webinar-name/"
-              />
+            <div>
+              <div className="form-group">
+                <label>Image</label>
+                <label
+                  className={`image-upload ${formData.upcomingImage ? 'has-image' : ''}`}
+                  onDragOver={handleDragOver}
+                  onDrop={handleDrop('upcomingImage')}
+                >
+                  {formData.upcomingImage ? (
+                    <img src={formData.upcomingImage} alt="Preview" />
+                  ) : (
+                    <p>Click or drag image here</p>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload('upcomingImage')}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              </div>
+              <div className="form-group">
+                <label>Member Link</label>
+                <input
+                  type="url"
+                  value={formData.upcomingMemberLink}
+                  onChange={(e) => setFormData(prev => ({ ...prev, upcomingMemberLink: e.target.value }))}
+                />
+              </div>
+              <div className="form-group">
+                <label>Non-Member Link</label>
+                <input
+                  type="url"
+                  value={formData.upcomingNonMemberLink}
+                  onChange={(e) => setFormData(prev => ({ ...prev, upcomingNonMemberLink: e.target.value }))}
+                  placeholder="https://animaltrainingacademy.com/webinar-name/"
+                />
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* UTM & Schedule */}
-      <div className="card">
-        <h2>UTM & Schedule</h2>
-        <div className="grid-2">
+      {/* Step 6: Subject Lines */}
+      <div className={`card ${collapsedSections.has('subject') ? 'collapsed' : ''}`}>
+        <h2 onClick={() => toggleSection('subject')} style={{ cursor: 'pointer' }}>
+          <span className={`step-indicator ${getStepStatus('subject')}`}>6</span>
+          Subject Lines & Preview Text
+          {getStepStatus('subject') === 'complete' && <span className="complete-badge">✓</span>}
+          <span className="collapse-icon">{collapsedSections.has('subject') ? '▼' : '▲'}</span>
+        </h2>
+        {!collapsedSections.has('subject') && (
+          <>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 16 }}>
+              <button
+                onClick={generateSubjectLines}
+                className="btn btn-primary"
+                disabled={loadingSubjects || selectedToolboxTitle === null}
+              >
+                {loadingSubjects ? 'Generating...' : subjectLines.length > 0 ? 'Regenerate Subjects' : 'Generate 10 Subject Lines'}
+              </button>
+              {selectedToolboxTitle === null && (
+                <span style={{ color: '#f57c00', fontSize: 13 }}>
+                  Select a title in Step 2 first
+                </span>
+              )}
+            </div>
+
+            {subjectLines.length > 0 && (
+              <div className="subject-lines">
+                {subjectLines.map((line, index) => (
+                  <div
+                    key={index}
+                    className={`subject-line-option ${selectedSubject === index ? 'selected' : ''}`}
+                    onClick={() => setSelectedSubject(index)}
+                  >
+                    <input
+                      type="radio"
+                      checked={selectedSubject === index}
+                      onChange={() => setSelectedSubject(index)}
+                    />
+                    <div className="text">
+                      <div className="subject">{line.subject}</div>
+                      <div className="preview">{line.preview}</div>
+                    </div>
+                    <button
+                      className="copy-btn"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        copyToClipboard(`${line.subject}\n${line.preview}`, `subject-${index}`)
+                      }}
+                      title="Copy to clipboard"
+                    >
+                      {copiedField === `subject-${index}` ? '✓' : '📋'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Step 7: UTM, Schedule & Create */}
+      <div className="card final-step">
+        <h2>
+          <span className={`step-indicator ${getStepStatus('create')}`}>7</span>
+          Finalize & Create Broadcasts
+          {getStepStatus('create') === 'complete' && <span className="complete-badge">✓ Created!</span>}
+        </h2>
+
+        <div className="grid-2" style={{ marginBottom: 20 }}>
           <div className="form-group">
             <label>Campaign Date (for UTM)</label>
             <input
@@ -738,7 +1010,7 @@ export default function Home() {
               value={formData.campaignDate}
               onChange={(e) => setFormData(prev => ({ ...prev, campaignDate: e.target.value }))}
             />
-            <div className="utm-preview" style={{ marginTop: 8 }}>
+            <div className="utm-preview">
               utm_campaign=behavior-bulletin-{new Date(formData.campaignDate).getDate()}-{new Date(formData.campaignDate).toLocaleString('en-US', { month: 'short' }).toLowerCase()}
             </div>
           </div>
@@ -751,69 +1023,42 @@ export default function Home() {
             />
           </div>
         </div>
-      </div>
-
-      {/* Subject Lines */}
-      <div className="card">
-        <h2>Subject Lines & Preview Text</h2>
-        <button
-          onClick={generateSubjectLines}
-          className="btn btn-primary"
-          disabled={loadingSubjects}
-          style={{ marginBottom: 20 }}
-        >
-          {loadingSubjects ? 'Generating...' : 'Generate 10 Subject Lines'}
-        </button>
-
-        {subjectLines.length > 0 && (
-          <div className="subject-lines">
-            {subjectLines.map((line, index) => (
-              <div
-                key={index}
-                className={`subject-line-option ${selectedSubject === index ? 'selected' : ''}`}
-                onClick={() => setSelectedSubject(index)}
-              >
-                <input
-                  type="radio"
-                  checked={selectedSubject === index}
-                  onChange={() => setSelectedSubject(index)}
-                />
-                <div className="text">
-                  <div className="subject">{line.subject}</div>
-                  <div className="preview">{line.preview}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="card">
-        <h2>Create Broadcasts</h2>
-        <p style={{ marginBottom: 16, color: '#666' }}>
-          This will create two draft broadcasts in Kit - one for members and one for non-members.
-          You can review and edit them in Kit before sending.
-        </p>
 
         {broadcastResult && (
-          <div className={`status-badge ${broadcastResult.includes('Error') ? 'error' : 'success'}`} style={{ display: 'block', marginBottom: 16, padding: 12 }}>
+          <div className={`status-badge ${broadcastResult.includes('Error') || broadcastResult.includes('Failed') ? 'error' : 'success'}`} style={{ display: 'block', marginBottom: 16, padding: 12 }}>
             {broadcastResult}
           </div>
         )}
 
-        <button
-          onClick={createBroadcasts}
-          className="btn btn-primary"
-          disabled={creatingBroadcast || selectedSubject === null}
-        >
-          {creatingBroadcast ? 'Creating...' : 'Create Draft Broadcasts in Kit'}
-        </button>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <button
+            onClick={createBroadcasts}
+            className="btn btn-primary btn-lg"
+            disabled={creatingBroadcast || selectedSubject === null}
+          >
+            {creatingBroadcast ? 'Creating...' : 'Create Draft Broadcasts in Kit'}
+          </button>
 
-        {selectedSubject === null && subjectLines.length > 0 && (
-          <p style={{ marginTop: 8, color: '#f57c00', fontSize: 13 }}>
-            Please select a subject line above first
-          </p>
+          {selectedSubject === null && subjectLines.length > 0 && (
+            <span style={{ color: '#f57c00', fontSize: 13 }}>
+              Please select a subject line in Step 6
+            </span>
+          )}
+
+          {selectedSubject === null && subjectLines.length === 0 && (
+            <span style={{ color: '#f57c00', fontSize: 13 }}>
+              Complete Steps 1-6 first
+            </span>
+          )}
+        </div>
+
+        {selectedSubject !== null && (
+          <div className="selected-summary">
+            <h4>Ready to create with:</h4>
+            <p><strong>Title:</strong> {formData.toolboxTitle}</p>
+            <p><strong>Subject:</strong> {subjectLines[selectedSubject]?.subject}</p>
+            <p><strong>Preview:</strong> {subjectLines[selectedSubject]?.preview}</p>
+          </div>
         )}
       </div>
     </div>
