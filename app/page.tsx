@@ -27,6 +27,7 @@ interface FormData {
   prevWebinarTitle: string
   prevWebinarImage: string
   prevWebinarMemberLink: string
+  prevWebinarNonMemberLink: string
 
   // Upcoming / Archives
   upcomingTitle: string
@@ -63,6 +64,7 @@ export default function Home() {
     prevWebinarTitle: '',
     prevWebinarImage: '',
     prevWebinarMemberLink: 'https://atamember.com/web-class-replays/',
+    prevWebinarNonMemberLink: '',
     upcomingTitle: '',
     upcomingSynopsis: '',
     upcomingImage: '',
@@ -317,6 +319,7 @@ export default function Home() {
   function generateEmailHTML(isMember: boolean): string {
     const synopsis = shortenedSynopsis || formData.upcomingSynopsis
     const upcomingLink = isMember ? formData.upcomingMemberLink : formData.upcomingNonMemberLink
+    const prevWebinarLink = isMember ? formData.prevWebinarMemberLink : formData.prevWebinarNonMemberLink
 
     // This is a simplified HTML template - in production you'd use the actual Kit template
     return `
@@ -351,7 +354,7 @@ export default function Home() {
         ${formData.prevWebinarImage ? `<img src="${formData.prevWebinarImage}" alt="Webinar" style="max-width: 100%; border-radius: 8px;">` : ''}
         <h3>Member Webinar Replay</h3>
         <p>${formData.prevWebinarTitle}</p>
-        <a href="${generateUTM(formData.prevWebinarMemberLink)}" style="display: inline-block; background: #666; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Watch Now</a>
+        <a href="${generateUTM(prevWebinarLink)}" style="display: inline-block; background: #666; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Watch Now</a>
       </div>
 
       <!-- Podcast -->
@@ -598,6 +601,15 @@ export default function Home() {
               type="url"
               value={formData.prevWebinarMemberLink}
               onChange={(e) => setFormData(prev => ({ ...prev, prevWebinarMemberLink: e.target.value }))}
+            />
+          </div>
+          <div className="form-group">
+            <label>Non-Member Landing Page</label>
+            <input
+              type="url"
+              value={formData.prevWebinarNonMemberLink}
+              onChange={(e) => setFormData(prev => ({ ...prev, prevWebinarNonMemberLink: e.target.value }))}
+              placeholder="https://animaltrainingacademy.com/webinar-name/"
             />
           </div>
         </div>
