@@ -103,6 +103,46 @@ export default function Home() {
     checkAuth()
   }, [])
 
+  // Load saved draft from localStorage on mount
+  useEffect(() => {
+    const savedDraft = localStorage.getItem('behaviourBulletinDraft')
+    if (savedDraft) {
+      try {
+        const parsed = JSON.parse(savedDraft)
+        setFormData(prev => ({ ...prev, ...parsed.formData }))
+        if (parsed.toolboxTitles) setToolboxTitles(parsed.toolboxTitles)
+        if (parsed.selectedToolboxTitle !== undefined) setSelectedToolboxTitle(parsed.selectedToolboxTitle)
+        if (parsed.subjectLines) setSubjectLines(parsed.subjectLines)
+        if (parsed.selectedSubject !== undefined) setSelectedSubject(parsed.selectedSubject)
+        if (parsed.shortenedSynopsis) setShortenedSynopsis(parsed.shortenedSynopsis)
+        if (parsed.podcast) setPodcast(parsed.podcast)
+      } catch (e) {
+        console.error('Failed to load draft:', e)
+      }
+    }
+  }, [])
+
+  // Auto-save draft to localStorage whenever form changes
+  useEffect(() => {
+    const draft = {
+      formData,
+      toolboxTitles,
+      selectedToolboxTitle,
+      subjectLines,
+      selectedSubject,
+      shortenedSynopsis,
+      podcast
+    }
+    localStorage.setItem('behaviourBulletinDraft', JSON.stringify(draft))
+  }, [formData, toolboxTitles, selectedToolboxTitle, subjectLines, selectedSubject, shortenedSynopsis, podcast])
+
+  function clearDraft() {
+    if (confirm('Are you sure you want to clear all form data?')) {
+      localStorage.removeItem('behaviourBulletinDraft')
+      window.location.reload()
+    }
+  }
+
   async function checkAuth() {
     try {
       const res = await fetch('/api/auth/check')
@@ -421,7 +461,10 @@ export default function Home() {
           <h1>Behaviour Bulletin Tool</h1>
           <p style={{ opacity: 0.9, fontSize: 14 }}>Animal Training Academy</p>
         </div>
-        <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={clearDraft} className="btn btn-secondary" style={{ background: '#ff6b6b', color: 'white' }}>Clear Draft</button>
+          <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
+        </div>
       </div>
 
       {/* Trainer's Toolbox */}
