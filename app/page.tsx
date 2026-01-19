@@ -8,29 +8,24 @@ export default function Home() {
   const [loginError, setLoginError] = useState('')
   const [isLoggingIn, setIsLoggingIn] = useState(false)
 
-  const [rawContent, setRawContent] = useState('')
-  const [generating, setGenerating] = useState(false)
-  const [result, setResult] = useState<{
-    subjectLines: { subject: string; preview: string }[]
-    emailHtml: string
-  } | null>(null)
-  const [selectedSubject, setSelectedSubject] = useState<number | null>(null)
+  // Inputs
+  const [toolboxContent, setToolboxContent] = useState('')
+  const [webinarSynopsis, setWebinarSynopsis] = useState('')
+
+  // Outputs
+  const [subjectLines, setSubjectLines] = useState<string[]>([])
+  const [previewTexts, setPreviewTexts] = useState<string[]>([])
+  const [shortenedSynopsis, setShortenedSynopsis] = useState('')
+
+  // Loading states
+  const [loadingSubjects, setLoadingSubjects] = useState(false)
+  const [loadingSynopsis, setLoadingSynopsis] = useState(false)
+
   const [copied, setCopied] = useState<string | null>(null)
 
   useEffect(() => {
     checkAuth()
   }, [])
-
-  // Load saved content from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem('behaviourBulletinContent')
-    if (saved) setRawContent(saved)
-  }, [])
-
-  // Auto-save content
-  useEffect(() => {
-    localStorage.setItem('behaviourBulletinContent', rawContent)
-  }, [rawContent])
 
   async function checkAuth() {
     try {
@@ -70,61 +65,75 @@ export default function Home() {
     setIsAuthenticated(false)
   }
 
-  async function generateEmail() {
-    if (!rawContent.trim()) {
-      alert('Please paste your content first')
+  async function generateSubjectsAndPreviews() {
+    if (!toolboxContent.trim()) {
+      alert('Paste your Toolbox content first')
       return
     }
 
-    setGenerating(true)
-    setResult(null)
-    setSelectedSubject(null)
-
+    setLoadingSubjects(true)
     try {
-      const res = await fetch('/api/generate-email', {
+      const res = await fetch('/api/generate-copy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: rawContent })
+        body: JSON.stringify({
+          type: 'subjects',
+          content: toolboxContent
+        })
       })
-
       const data = await res.json()
       if (data.error) {
-        alert(`Error: ${data.error}`)
+        alert(data.error)
       } else {
-        setResult(data)
+        setSubjectLines(data.subjectLines || [])
+        setPreviewTexts(data.previewTexts || [])
       }
     } catch (error) {
-      alert(`Failed to generate: ${error}`)
+      alert(`Failed: ${error}`)
     } finally {
-      setGenerating(false)
+      setLoadingSubjects(false)
     }
   }
 
-  function copyToClipboard(text: string, type: string) {
+  async function shortenSynopsis() {
+    if (!webinarSynopsis.trim()) {
+      alert('Paste the webinar synopsis first')
+      return
+    }
+
+    setLoadingSynopsis(true)
+    try {
+      const res = await fetch('/api/generate-copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'synopsis',
+          content: webinarSynopsis
+        })
+      })
+      const data = await res.json()
+      if (data.error) {
+        alert(data.error)
+      } else {
+        setShortenedSynopsis(data.shortenedSynopsis || '')
+      }
+    } catch (error) {
+      alert(`Failed: ${error}`)
+    } finally {
+      setLoadingSynopsis(false)
+    }
+  }
+
+  function copy(text: string, id: string) {
     navigator.clipboard.writeText(text)
-    setCopied(type)
-    setTimeout(() => setCopied(null), 2000)
+    setCopied(id)
+    setTimeout(() => setCopied(null), 1500)
   }
 
-  function clearAll() {
-    if (confirm('Clear everything and start fresh?')) {
-      setRawContent('')
-      setResult(null)
-      setSelectedSubject(null)
-      localStorage.removeItem('behaviourBulletinContent')
-    }
-  }
-
-  // Loading state
   if (isAuthenticated === null) {
-    return (
-      <div className="login-container">
-        <div className="loading-spinner"></div>
-      </div>
-    )
+    return <div className="login-container"><div className="loading-spinner"></div></div>
   }
 
-  // Login screen
   if (!isAuthenticated) {
     return (
       <div className="login-container">
@@ -152,142 +161,122 @@ export default function Home() {
   return (
     <div className="container">
       <div className="header">
-        <div>
-          <h1>Behaviour Bulletin Generator</h1>
-          <p style={{ opacity: 0.9, fontSize: 14 }}>Paste content → Generate email → Copy to Kit</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={clearAll} className="btn btn-secondary" style={{ background: '#ff6b6b', color: 'white' }}>
-            Clear All
-          </button>
-          <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
-        </div>
+        <h1>Behaviour Bulletin Helper</h1>
+        <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
       </div>
 
-      {/* Step 1: Paste Content */}
+      {/* Subject Lines & Preview Text */}
       <div className="card">
-        <h2>1. Paste Your Content</h2>
-        <p style={{ color: '#666', marginBottom: 16 }}>
-          Paste everything: Trainer&apos;s Toolbox post, webinar details, podcast info, upcoming/archive webinar.
-          The AI will figure out the structure.
+        <h2>Subject Lines & Preview Text</h2>
+        <p style={{ color: '#666', marginBottom: 12 }}>
+          Paste this week&apos;s Trainer&apos;s Toolbox content (or key details about this week&apos;s email)
         </p>
         <textarea
-          value={rawContent}
-          onChange={(e) => setRawContent(e.target.value)}
-          placeholder={`Example:
-
-TRAINER'S TOOLBOX:
-How do you train a medical behavior with an animal who never wants to be touched?
-This was the challenge ATA member Lisa Longo faced with a client's macaw...
-Link: https://atamember.com/2020/12/11/certified-parrot-trainer/
-CTA: See the case studies and Lisa's 5 objectives.
-
-PREVIOUS WEBINAR:
-Wolf Training with Ryan Talbot
-Member link: https://atamember.com/web-class-replays/
-Non-member link: https://animaltrainingacademy.com/wolf-training/
-
-PODCAST:
-Engineering Better Husbandry with Ryan Talbot [Episode 271]
-
-UPCOMING WEBINAR (or ARCHIVE):
-A Deeper Look at Separation Anxiety with Malena DeMartini
-Synopsis: Join separation anxiety expert Malena DeMartini for an advanced deep dive...
-Member link: https://atamember.com/web-class-replays/
-Non-member link: https://animaltrainingacademy.com/separation-anxiety/`}
-          style={{ minHeight: 300, fontFamily: 'monospace', fontSize: 13 }}
+          value={toolboxContent}
+          onChange={(e) => setToolboxContent(e.target.value)}
+          placeholder="Paste the Toolbox content, webinar topic, or a summary of what's in this week's email..."
+          style={{ minHeight: 120 }}
         />
-        <div style={{ marginTop: 16 }}>
-          <button
-            onClick={generateEmail}
-            className="btn btn-primary btn-lg"
-            disabled={generating || !rawContent.trim()}
-          >
-            {generating ? 'Generating...' : 'Generate Email & Subject Lines'}
-          </button>
-        </div>
+        <button
+          onClick={generateSubjectsAndPreviews}
+          className="btn btn-primary"
+          disabled={loadingSubjects || !toolboxContent.trim()}
+          style={{ marginTop: 12 }}
+        >
+          {loadingSubjects ? 'Generating...' : 'Generate Subject Lines & Preview Text'}
+        </button>
+
+        {subjectLines.length > 0 && (
+          <div style={{ marginTop: 20 }}>
+            <h3 style={{ marginBottom: 12 }}>Subject Lines</h3>
+            {subjectLines.map((line, i) => (
+              <div key={i} style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '8px 12px',
+                background: '#f9f9f9',
+                borderRadius: 6,
+                marginBottom: 8
+              }}>
+                <span>{line}</span>
+                <button
+                  onClick={() => copy(line, `subject-${i}`)}
+                  className="btn btn-sm"
+                >
+                  {copied === `subject-${i}` ? '✓' : 'Copy'}
+                </button>
+              </div>
+            ))}
+
+            <h3 style={{ marginTop: 20, marginBottom: 12 }}>Preview Texts</h3>
+            {previewTexts.map((text, i) => (
+              <div key={i} style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '8px 12px',
+                background: '#f9f9f9',
+                borderRadius: 6,
+                marginBottom: 8
+              }}>
+                <span style={{ fontSize: 14 }}>{text}</span>
+                <button
+                  onClick={() => copy(text, `preview-${i}`)}
+                  className="btn btn-sm"
+                >
+                  {copied === `preview-${i}` ? '✓' : 'Copy'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Step 2: Results */}
-      {result && (
-        <>
-          {/* Subject Lines */}
-          <div className="card">
-            <h2>2. Choose Subject Line</h2>
-            <div className="subject-lines">
-              {result.subjectLines.map((line, index) => (
-                <div
-                  key={index}
-                  className={`subject-line-option ${selectedSubject === index ? 'selected' : ''}`}
-                  onClick={() => setSelectedSubject(index)}
-                >
-                  <input
-                    type="radio"
-                    checked={selectedSubject === index}
-                    onChange={() => setSelectedSubject(index)}
-                  />
-                  <div className="text">
-                    <div className="subject">{line.subject}</div>
-                    <div className="preview">{line.preview}</div>
-                  </div>
-                  <button
-                    className="copy-btn"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      copyToClipboard(`${line.subject}\n${line.preview}`, `subject-${index}`)
-                    }}
-                  >
-                    {copied === `subject-${index}` ? '✓' : 'Copy'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* Webinar Synopsis */}
+      <div className="card">
+        <h2>Shorten Webinar Synopsis</h2>
+        <p style={{ color: '#666', marginBottom: 12 }}>
+          Paste the full webinar description to get a shorter version for the email
+        </p>
+        <textarea
+          value={webinarSynopsis}
+          onChange={(e) => setWebinarSynopsis(e.target.value)}
+          placeholder="Paste the full webinar synopsis here..."
+          style={{ minHeight: 120 }}
+        />
+        <button
+          onClick={shortenSynopsis}
+          className="btn btn-primary"
+          disabled={loadingSynopsis || !webinarSynopsis.trim()}
+          style={{ marginTop: 12 }}
+        >
+          {loadingSynopsis ? 'Shortening...' : 'Shorten Synopsis'}
+        </button>
 
-          {/* Email HTML */}
-          <div className="card">
-            <h2>3. Copy Email HTML</h2>
-            <p style={{ color: '#666', marginBottom: 16 }}>
-              Copy this HTML and paste it into Kit&apos;s email editor (use the HTML/code view).
-            </p>
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => copyToClipboard(result.emailHtml, 'html')}
-                className="btn btn-primary"
-                style={{ marginBottom: 12 }}
-              >
-                {copied === 'html' ? '✓ Copied!' : 'Copy Email HTML'}
-              </button>
-              <pre style={{
-                background: '#f5f5f5',
-                padding: 16,
-                borderRadius: 8,
-                overflow: 'auto',
-                maxHeight: 400,
-                fontSize: 12,
-                lineHeight: 1.4
-              }}>
-                {result.emailHtml}
-              </pre>
-            </div>
-          </div>
-
-          {/* Preview */}
-          <div className="card">
-            <h2>4. Preview</h2>
+        {shortenedSynopsis && (
+          <div style={{ marginTop: 20 }}>
             <div style={{
-              background: 'white',
-              border: '1px solid #ddd',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              padding: 16,
+              background: '#e8f5e0',
               borderRadius: 8,
-              padding: 20,
-              maxWidth: 600,
-              margin: '0 auto'
+              border: '1px solid #c8e6c0'
             }}>
-              <div dangerouslySetInnerHTML={{ __html: result.emailHtml }} />
+              <p style={{ margin: 0, lineHeight: 1.6 }}>{shortenedSynopsis}</p>
+              <button
+                onClick={() => copy(shortenedSynopsis, 'synopsis')}
+                className="btn btn-sm"
+                style={{ marginLeft: 12, flexShrink: 0 }}
+              >
+                {copied === 'synopsis' ? '✓' : 'Copy'}
+              </button>
             </div>
           </div>
-        </>
-      )}
+        )}
+      </div>
     </div>
   )
 }
