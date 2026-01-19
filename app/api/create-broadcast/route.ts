@@ -10,11 +10,11 @@ interface BroadcastData {
 async function createKitBroadcast(data: BroadcastData) {
   const apiKey = process.env.KIT_API_KEY
 
-  const response = await fetch('https://api.convertkit.com/v4/broadcasts', {
+  const response = await fetch('https://api.kit.com/v4/broadcasts', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
+      'X-Kit-Api-Key': apiKey || ''
     },
     body: JSON.stringify({
       broadcast: {
