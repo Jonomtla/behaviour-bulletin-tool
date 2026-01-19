@@ -21,8 +21,7 @@ async function createKitBroadcast(data: BroadcastData) {
       preview_text: data.previewText,
       content: data.htmlContent,
       public: false,
-      send_at: data.sendAt || null,
-      email_template_id: 4265782
+      send_at: data.sendAt || null
     })
   })
 
