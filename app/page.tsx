@@ -375,11 +375,33 @@ export default function Home() {
     }
   }
 
-  function processImageFile(file: File, field: 'prevWebinarImage' | 'upcomingImage') {
+  async function processImageFile(file: File, field: 'prevWebinarImage' | 'upcomingImage') {
     if (!file.type.startsWith('image/')) return
+
+    // First show local preview
     const reader = new FileReader()
-    reader.onloadend = () => {
-      setFormData(prev => ({ ...prev, [field]: reader.result as string }))
+    reader.onloadend = async () => {
+      const base64 = reader.result as string
+      // Show loading state with local preview
+      setFormData(prev => ({ ...prev, [field]: base64 }))
+
+      // Upload to get hosted URL
+      try {
+        const res = await fetch('/api/upload-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: base64, filename: file.name })
+        })
+        const data = await res.json()
+        if (data.url) {
+          // Replace with hosted URL
+          setFormData(prev => ({ ...prev, [field]: data.url }))
+        }
+      } catch (error) {
+        console.error('Failed to upload image:', error)
+        // Keep the base64 as fallback for preview, but warn user
+        alert('Image upload failed. The image may not appear in the final email.')
+      }
     }
     reader.readAsDataURL(file)
   }
