@@ -17,13 +17,11 @@ async function createKitBroadcast(data: BroadcastData) {
       'X-Kit-Api-Key': apiKey || ''
     },
     body: JSON.stringify({
-      broadcast: {
-        subject: data.subject,
-        preview_text: data.previewText,
-        content: data.htmlContent,
-        public: false,
-        send_at: data.sendAt || null
-      }
+      subject: data.subject,
+      preview_text: data.previewText,
+      content: data.htmlContent,
+      public: false,
+      send_at: data.sendAt || null
     })
   })
 
