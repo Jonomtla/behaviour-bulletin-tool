@@ -22,7 +22,7 @@ async function createKitBroadcast(data: BroadcastData) {
       content: data.htmlContent,
       public: false,
       send_at: data.sendAt || null,
-      email_template_id: 3825422
+      email_template_id: 4265782
     })
   })
 
